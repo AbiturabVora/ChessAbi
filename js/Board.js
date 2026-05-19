@@ -1,0 +1,257 @@
+const INITIAL_PIECES = [
+	{ rank: 'knight', position: 12, color: 'white', name: 'whiteKnight1' },
+	{ rank: 'knight', position: 17, color: 'white', name: 'whiteKnight2' },
+	{ rank: 'queen', position: 14, color: 'white', name: 'whiteQueen' },
+	{ rank: 'bishop', position: 13, color: 'white', name: 'whiteBishop1' },
+	{ rank: 'bishop', position: 16, color: 'white', name: 'whiteBishop2' },
+	{ rank: 'pawn', position: 24, color: 'white', name: 'whitePawn4' },
+	{ rank: 'pawn', position: 25, color: 'white', name: 'whitePawn5' },
+	{ rank: 'pawn', position: 26, color: 'white', name: 'whitePawn6' },
+	{ rank: 'pawn', position: 21, color: 'white', name: 'whitePawn1' },
+	{ rank: 'pawn', position: 22, color: 'white', name: 'whitePawn2' },
+	{ rank: 'pawn', position: 23, color: 'white', name: 'whitePawn3' },
+	{ rank: 'pawn', position: 27, color: 'white', name: 'whitePawn7' },
+	{ rank: 'pawn', position: 28, color: 'white', name: 'whitePawn8' },
+	{ rank: 'rook', position: 11, color: 'white', name: 'whiteRook1', ableToCastle: true },
+	{ rank: 'rook', position: 18, color: 'white', name: 'whiteRook2', ableToCastle: true },
+	{ rank: 'king', position: 15, color: 'white', name: 'whiteKing', ableToCastle: true },
+
+	{ rank: 'knight', position: 82, color: 'black', name: 'blackKnight1' },
+	{ rank: 'knight', position: 87, color: 'black', name: 'blackKnight2' },
+	{ rank: 'queen', position: 84, color: 'black', name: 'blackQueen' },
+	{ rank: 'bishop', position: 83, color: 'black', name: 'blackBishop1' },
+	{ rank: 'bishop', position: 86, color: 'black', name: 'blackBishop2' },
+	{ rank: 'pawn', position: 74, color: 'black', name: 'blackPawn4' },
+	{ rank: 'pawn', position: 75, color: 'black', name: 'blackPawn5' },
+	{ rank: 'pawn', position: 76, color: 'black', name: 'blackPawn6' },
+	{ rank: 'pawn', position: 71, color: 'black', name: 'blackPawn1' },
+	{ rank: 'pawn', position: 72, color: 'black', name: 'blackPawn2' },
+	{ rank: 'pawn', position: 73, color: 'black', name: 'blackPawn3' },
+	{ rank: 'pawn', position: 77, color: 'black', name: 'blackPawn7' },
+	{ rank: 'pawn', position: 78, color: 'black', name: 'blackPawn8' },
+	{ rank: 'rook', position: 81, color: 'black', name: 'blackRook1', ableToCastle: true },
+	{ rank: 'rook', position: 88, color: 'black', name: 'blackRook2', ableToCastle: true },
+	{ rank: 'king', position: 85, color: 'black', name: 'blackKing', ableToCastle: true },
+];
+
+const createBoardSession = (game) => {
+	const board = document.getElementById('board');
+	const getSquares = () => board.querySelectorAll('.square');
+	const whiteSematary = document.getElementById('whiteSematary');
+	const blackSematary = document.getElementById('blackSematary');
+	const turnSign = document.getElementById('turn');
+	let clickedPieceName;
+	let gameState = 'idle';
+	let matchOptions = {};
+	let aiPlayer = null;
+	let ended = false;
+
+	const resetSematary = () => {
+		whiteSematary.querySelectorAll('div').forEach((el) => (el.innerHTML = ''));
+		blackSematary.querySelectorAll('div').forEach((el) => (el.innerHTML = ''));
+	};
+
+	const resetBoard = () => {
+		resetSematary();
+		board.querySelectorAll('.allowed, .clicked-square, .last-move').forEach((el) => {
+			el.classList.remove('allowed', 'clicked-square', 'last-move');
+		});
+
+		for (const square of getSquares()) {
+			square.innerHTML = '';
+		}
+
+		for (const piece of game.pieces) {
+			const square = document.getElementById(piece.position);
+			square.innerHTML = `<img class="piece ${piece.rank}" id="${piece.name}" src="img/${piece.color}-${piece.rank}.webp">`;
+		}
+	};
+
+	const setGameState = (state) => {
+		gameState = state;
+		if (gameState === 'ai_thinking') {
+			turnSign.innerHTML += ' (thinking...)';
+		}
+	};
+
+	const setAllowedSquares = (pieceImg) => {
+		clickedPieceName = pieceImg.id;
+		const allowedMoves = game.getPieceAllowedMoves(clickedPieceName);
+		if (allowedMoves) {
+			const clickedSquare = pieceImg.parentNode;
+			clickedSquare.classList.add('clicked-square');
+
+			allowedMoves.forEach((allowedMove) => {
+				const target = document.getElementById(allowedMove);
+				if (target) target.classList.add('allowed');
+			});
+		} else {
+			clearSquares();
+		}
+	};
+
+	const clearSquares = () => {
+		board.querySelectorAll('.allowed').forEach((allowedSquare) => allowedSquare.classList.remove('allowed'));
+
+		const clickedSquare = document.getElementsByClassName('clicked-square')[0];
+		if (clickedSquare) {
+			clickedSquare.classList.remove('clicked-square');
+		}
+	};
+
+	const setLastMoveSquares = (from, to) => {
+		document.querySelectorAll('.last-move').forEach((lastMoveSquare) => lastMoveSquare.classList.remove('last-move'));
+		from.classList.add('last-move');
+		to.classList.add('last-move');
+	};
+
+	const isInteractive = () => gameState !== 'ai_thinking' && gameState !== 'ended' && !ended;
+
+	function movePiece(square) {
+		if (!isInteractive()) return;
+
+		const position = square.getAttribute('id');
+		const existedPiece = game.getPieceByPos(position);
+
+		if (existedPiece && existedPiece.color === game.turn) {
+			const pieceImg = document.getElementById(existedPiece.name);
+			clearSquares();
+			return setAllowedSquares(pieceImg);
+		}
+
+		game.movePiece(clickedPieceName, position);
+	}
+
+	const getSquareFromEvent = (event) => {
+		if (event.target.classList?.contains('square')) return event.target;
+		return event.target.closest?.('.square');
+	};
+
+	board.addEventListener('click', (event) => {
+		const square = getSquareFromEvent(event);
+		if (square) movePiece(square);
+	});
+
+	board.addEventListener('dragover', (event) => {
+		const square = getSquareFromEvent(event);
+		if (square) event.preventDefault();
+	});
+
+	board.addEventListener('drop', (event) => {
+		const square = getSquareFromEvent(event);
+		if (square) {
+			event.preventDefault();
+			movePiece(square);
+		}
+	});
+
+	board.addEventListener('dragstart', (event) => {
+		if (!event.target.matches('img.piece') || !isInteractive()) return;
+		event.stopPropagation();
+		event.dataTransfer.setData('text', event.target.id);
+		clearSquares();
+		setAllowedSquares(event.target);
+	});
+
+	board.addEventListener('drop', (event) => {
+		if (!event.target.matches('img.piece') || !isInteractive()) return;
+		event.stopPropagation();
+		clearSquares();
+		setAllowedSquares(event.target);
+	});
+
+	const startTurn = (turn) => {
+		if (ended) return;
+
+		gameState = turn + '_turn';
+		turnSign.innerHTML = turn === 'white' ? "White's Turn" : "Black's Turn";
+
+		if (gameState !== 'checkmate' && matchOptions.playAgainst === 'ai' && turn === matchOptions.aiColor) {
+			setGameState('ai_thinking');
+			aiPlayer.play(game.pieces, (aiPlay) => {
+				if (ended) return;
+				setGameState('human_turn');
+				game.movePiece(aiPlay.move.pieceName, aiPlay.move.position);
+			});
+		}
+	};
+
+	game.on('pieceMove', (move) => {
+		const from = document.getElementById(move.from);
+		const to = document.getElementById(move.piece.position);
+		to.append(document.getElementById(move.piece.name));
+		clearSquares();
+		setLastMoveSquares(from, to);
+	});
+
+	game.on('turnChange', (turn) => {
+		startTurn(turn);
+		if (typeof chessApp !== 'undefined') chessApp.onTurnChange(turn);
+	});
+
+	game.on('promotion', (queen) => {
+		const square = document.getElementById(queen.position);
+		square.innerHTML = `<img class="piece queen" id="${queen.name}" src="img/${queen.color}-queen.webp">`;
+	});
+
+	game.on('kill', (piece) => {
+		const pieceImg = document.getElementById(piece.name);
+		pieceImg.parentNode.removeChild(pieceImg);
+		pieceImg.className = '';
+
+		const sematary = piece.color === 'white' ? whiteSematary : blackSematary;
+		sematary.querySelector('.' + piece.rank).append(pieceImg);
+	});
+
+	game.on('checkMate', (color) => {
+		endGame(color + ' wins', color);
+	});
+
+	const endGame = (message, winnerColor) => {
+		ended = true;
+		gameState = 'ended';
+		const endScene = document.getElementById('endscene');
+		endScene.getElementsByClassName('winning-sign')[0].innerHTML = message;
+		endScene.classList.add('show');
+		if (typeof chessApp !== 'undefined') chessApp.onMatchEnd();
+	};
+
+	const startMatch = (options) => {
+		matchOptions = options;
+		ended = false;
+		gameState = 'playing';
+		aiPlayer = options.playAgainst === 'ai' ? ai(options.aiColor) : null;
+
+		game.startNewGame(
+			JSON.parse(JSON.stringify(INITIAL_PIECES)),
+			'white'
+		);
+		resetBoard();
+		document.getElementById('endscene').classList.remove('show');
+		startTurn('white');
+	};
+
+	const stopMatch = () => {
+		ended = true;
+		gameState = 'idle';
+		clearSquares();
+	};
+
+	return {
+		startMatch,
+		stopMatch,
+		endGame,
+		isEnded: () => ended,
+		getGame: () => game,
+	};
+};
+
+let boardSessionInstance = null;
+
+const initBoardSession = () => {
+	if (!boardSessionInstance) {
+		const game = new Game(JSON.parse(JSON.stringify(INITIAL_PIECES)), 'white');
+		boardSessionInstance = createBoardSession(game);
+	}
+	return boardSessionInstance;
+};
